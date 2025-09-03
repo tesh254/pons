@@ -39,6 +39,8 @@ type Config struct {
 	// MaxConcurrent limits the total number of concurrent HTTP requests
 	// This applies across all hosts being scraped
 	MaxConcurrent int
+	// Verbose enables verbose output with ASCII graphics
+	Verbose bool
 }
 
 // DefaultConfig returns a default configuration with reasonable values.
@@ -55,6 +57,7 @@ func DefaultConfig() *Config {
 		MaxDepth:      3,
 		RequestDelay:  1 * time.Second,
 		MaxConcurrent: 2,
+		Verbose:       false,
 	}
 }
 
@@ -94,6 +97,8 @@ type Scraper struct {
 	mutex sync.Mutex
 	// SubPathsHTMLContent stores the HTML content of each subpath
 	SubPathsHTMLContent map[string]string
+	// Verbose enables verbose output
+	Verbose bool
 }
 
 // New creates a new scraper with the given URL and configuration.
@@ -117,14 +122,19 @@ func New(url string, config *Config) *Scraper {
 		Timeout: config.Timeout,
 	}
 
-	return &Scraper{
+	s := &Scraper{
 		URL:                 url,
 		Config:              config,
 		client:              client,
 		lastRequestTime:     make(map[string]time.Time),
 		requestSem:          make(chan struct{}, config.MaxConcurrent),
 		SubPathsHTMLContent: make(map[string]string),
+		Verbose:             config.Verbose,
 	}
+
+	s.displayInitBanner()
+
+	return s
 }
 
 // waitForRateLimit waits for rate limiting based on the host
@@ -162,10 +172,13 @@ func (s *Scraper) waitForRateLimit(host string) {
 // Returns:
 //   - An error if the content cannot be fetched or parsed, nil otherwise
 func (s *Scraper) GetContent() error {
+	done := s.startSpinner("Fetching " + s.URL)
 	doc, _, err := s.fetchURL(s.URL)
 	if err != nil {
+		s.displayError(err)
 		return fmt.Errorf("failed to fetch content: %w", err)
 	}
+	close(done)
 
 	s.Content = doc
 	return nil
@@ -241,6 +254,8 @@ func (s *Scraper) GetMetadata() error {
 	s.Metadata.Title = title
 	s.Metadata.Description = description
 
+	s.displayMetadata()
+
 	return nil
 }
 
@@ -253,8 +268,10 @@ func (s *Scraper) GetMetadata() error {
 // Returns:
 //   - An error if the crawling fails, nil otherwise
 func (s *Scraper) GetAllPaths() error {
+	s.displayCrawlStartBanner()
 	parsedBase, err := url.Parse(s.URL)
 	if err != nil {
+		s.displayError(err)
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
 
@@ -265,6 +282,7 @@ func (s *Scraper) GetAllPaths() error {
 	// Start crawling from the base URL
 	err = s.Crawl(parsedBase, parsedBase, paths, visited, 0)
 	if err != nil {
+		s.displayError(err)
 		return fmt.Errorf("crawling failed: %w", err)
 	}
 
@@ -275,6 +293,8 @@ func (s *Scraper) GetAllPaths() error {
 	}
 
 	s.SubPaths = pathSlice
+	s.displayCrawlEndBanner()
+	s.displaySubpathResults()
 
 	return nil
 }
@@ -402,10 +422,13 @@ func (s *Scraper) Crawl(baseURL, currentURL *url.URL, paths, visited map[string]
 	visited[urlStr] = true
 
 	// Fetch and parse the URL
+	done := s.startSpinner("Crawling " + urlStr)
 	doc, htmlContent, err := s.fetchURL(urlStr)
 	if err != nil {
+		s.displayError(err)
 		return fmt.Errorf("failed to fetch %s: %w", urlStr, err)
 	}
+	close(done)
 
 	// Extract path from current URL
 	path := currentURL.Path
@@ -420,7 +443,7 @@ func (s *Scraper) Crawl(baseURL, currentURL *url.URL, paths, visited map[string]
 	for _, link := range links {
 		if err := s.Crawl(baseURL, link, paths, visited, depth+1); err != nil {
 			// Log error but continue crawling other links
-			fmt.Printf("Error crawling %s: %v\n", link.String(), err)
+			s.displayError(err)
 		}
 	}
 
