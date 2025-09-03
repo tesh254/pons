@@ -97,6 +97,8 @@ type Scraper struct {
 	mutex sync.Mutex
 	// SubPathsHTMLContent stores the HTML content of each subpath
 	SubPathsHTMLContent map[string]string
+	// SubPathsMarkdownContent stores the Markdown content of each subpath
+	SubPathsMarkdownContent map[string]string
 	// Verbose enables verbose output
 	Verbose bool
 }
@@ -123,13 +125,14 @@ func New(url string, config *Config) *Scraper {
 	}
 
 	s := &Scraper{
-		URL:                 url,
-		Config:              config,
-		client:              client,
-		lastRequestTime:     make(map[string]time.Time),
-		requestSem:          make(chan struct{}, config.MaxConcurrent),
-		SubPathsHTMLContent: make(map[string]string),
-		Verbose:             config.Verbose,
+		URL:                     url,
+		Config:                  config,
+		client:                  client,
+		lastRequestTime:         make(map[string]time.Time),
+		requestSem:              make(chan struct{}, config.MaxConcurrent),
+		SubPathsHTMLContent:     make(map[string]string),
+		SubPathsMarkdownContent: make(map[string]string),
+		Verbose:                 config.Verbose,
 	}
 
 	s.displayInitBanner()
@@ -187,6 +190,11 @@ func (s *Scraper) GetContent() error {
 // GetSubPathHTMLContent returns the HTML content of a subpath.
 func (s *Scraper) GetSubPathHTMLContent() map[string]string {
 	return s.SubPathsHTMLContent
+}
+
+// GetSubPathMarkdownContent returns the Markdown content of a subpath page
+func (s *Scraper) GetSubPathMarkdownContent() map[string]string {
+	return s.SubPathsMarkdownContent
 }
 
 // extractTitle extracts the title from an HTML node
@@ -254,7 +262,9 @@ func (s *Scraper) GetMetadata() error {
 	s.Metadata.Title = title
 	s.Metadata.Description = description
 
-	s.displayMetadata()
+	if s.Verbose {
+		s.displayMetadata()
+	}
 
 	return nil
 }
@@ -271,7 +281,9 @@ func (s *Scraper) GetAllPaths() error {
 	s.displayCrawlStartBanner()
 	parsedBase, err := url.Parse(s.URL)
 	if err != nil {
-		s.displayError(err)
+		if s.Verbose {
+			s.displayError(err)
+		}
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
 
@@ -282,7 +294,9 @@ func (s *Scraper) GetAllPaths() error {
 	// Start crawling from the base URL
 	err = s.Crawl(parsedBase, parsedBase, paths, visited, 0)
 	if err != nil {
-		s.displayError(err)
+		if s.Verbose {
+			s.displayError(err)
+		}
 		return fmt.Errorf("crawling failed: %w", err)
 	}
 
@@ -293,9 +307,10 @@ func (s *Scraper) GetAllPaths() error {
 	}
 
 	s.SubPaths = pathSlice
-	s.displayCrawlEndBanner()
-	s.displaySubpathResults()
-
+	if s.Verbose {
+		s.displayCrawlEndBanner()
+		s.displaySubpathResults()
+	}
 	return nil
 }
 
@@ -437,6 +452,14 @@ func (s *Scraper) Crawl(baseURL, currentURL *url.URL, paths, visited map[string]
 	}
 	paths[path] = true
 	s.SubPathsHTMLContent[path] = htmlContent
+	// parse to markdown
+	var parser Parser
+	markdown, err := parser.ToMarkdown(htmlContent)
+	if err != nil {
+		return fmt.Errorf("failed to convert to markdown: %w", err)
+	} else {
+		s.SubPathsMarkdownContent[path] = markdown
+	}
 
 	// Extract and process links
 	links := extractLinks(doc, baseURL, visited)

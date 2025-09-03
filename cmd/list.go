@@ -1,0 +1,42 @@
+package cmd
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/tesh254/pons/internal/storage"
+)
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Lists all documents in the database",
+	Run: func(cmd *cobra.Command, args []string) {
+		dbPath := viper.GetString("db")
+
+		st, err := storage.NewStorage(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize storage: %v", err)
+		}
+		defer st.Close()
+
+		docs, err := st.ListDocuments()
+		if err != nil {
+			log.Fatalf("Failed to list documents: %v", err)
+		}
+
+		if len(docs) == 0 {
+			fmt.Println("No documents found.")
+			return
+		}
+
+		for _, doc := range docs {
+			fmt.Printf("URL: %s\nChecksum: %s\n\n", doc.URL, doc.Checksum)
+		}
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(listCmd)
+}
