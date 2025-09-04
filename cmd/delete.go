@@ -3,9 +3,10 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tesh254/pons/internal/api"
 	"github.com/tesh254/pons/internal/llm"
 	"github.com/tesh254/pons/internal/storage"
@@ -17,8 +18,9 @@ var deleteCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		url := args[0]
-		dbPath := viper.GetString("db")
-		workerURL := viper.GetString("worker-url")
+		home, _ := os.UserHomeDir()
+		dbPath := filepath.Join(home, ".pons_data", "pons.db")
+		workerURL := "https://vectors.madebyknnls.com"
 
 		st, err := storage.NewStorage(dbPath)
 		if err != nil {

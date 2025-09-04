@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -15,18 +17,27 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Starts the MCP server",
 	Run: func(cmd *cobra.Command, args []string) {
-		dbPath := viper.GetString("db")
-		workerURL := viper.GetString("worker-url")
+		home, _ := os.UserHomeDir()
+		dbPath := filepath.Join(home, ".pons_data", "pons.db")
+		workerURL := "https://vectors.madebyknnls.com"
 		httpAddress := viper.GetString("http-address")
+
+		log.Printf("DB Path: %s", dbPath)
+		log.Printf("Worker URL: %s", workerURL)
+
+		log.Println("Initializing storage...")
 		// Initialize storage
 		st, err := storage.NewStorage(dbPath)
 		if err != nil {
 			log.Fatalf("Failed to initialize storage: %v", err)
 		}
+		log.Println("Storage initialized.")
 		defer st.Close()
 
+		log.Println("Initializing LLM...")
 		// Initialize LLM
 		emb := llm.NewEmbeddings(workerURL)
+		log.Println("LLM initialized.")
 
 		// Initialize API
 		ponsAPI := api.NewAPI(st, emb)

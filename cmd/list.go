@@ -3,9 +3,10 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tesh254/pons/internal/storage"
 )
 
@@ -13,7 +14,8 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lists all documents in the database",
 	Run: func(cmd *cobra.Command, args []string) {
-		dbPath := viper.GetString("db")
+		home, _ := os.UserHomeDir()
+		dbPath := filepath.Join(home, ".pons_data", "pons.db")
 
 		st, err := storage.NewStorage(dbPath)
 		if err != nil {

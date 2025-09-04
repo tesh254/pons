@@ -1,13 +1,13 @@
 package storage
 
 import (
-	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"go.etcd.io/bbolt"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Document represents the data to be stored.
@@ -20,12 +20,12 @@ type Document struct {
 	Embeddings  []float32 `json:"embeddings"`
 }
 
-// Storage manages the bbolt database.
+// Storage manages the SQLite database.
 type Storage struct {
-	db *bbolt.DB
+	db *sql.DB
 }
 
-// NewStorage creates or opens a bbolt database.
+// NewStorage creates or opens an SQLite database.
 func NewStorage(dbPath string) (*Storage, error) {
 	// Ensure the directory exists.
 	dir := filepath.Dir(dbPath)
@@ -33,10 +33,34 @@ func NewStorage(dbPath string) (*Storage, error) {
 		return nil, fmt.Errorf("failed to create database directory: %v", err)
 	}
 
-	db, err := bbolt.Open(dbPath, 0600, nil)
+	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open db: %v", err)
+		return nil, fmt.Errorf("failed to open database: %v", err)
 	}
+
+	// Enable WAL mode for better concurrency
+	_, err = db.Exec("PRAGMA journal_mode=WAL;")
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %v", err)
+	}
+
+	// Create documents table if it doesn't exist
+	createTableSQL := `
+	CREATE TABLE IF NOT EXISTS documents (
+		url TEXT PRIMARY KEY,
+		title TEXT,
+		description TEXT,
+		content TEXT,
+		checksum TEXT,
+		embeddings BLOB
+	);`
+	_, err = db.Exec(createTableSQL)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create documents table: %v", err)
+	}
+
 	return &Storage{db: db}, nil
 }
 
@@ -45,95 +69,94 @@ func (s *Storage) Close() {
 	s.db.Close()
 }
 
-// bucketName is the name of the bucket where documents are stored.
-var bucketName = []byte("documents")
+
 
 // UpsertDocument stores a document in the database.
 // The URL is used as the key.
 func (s *Storage) UpsertDocument(doc *Document) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(bucketName)
-		if err != nil {
-			return fmt.Errorf("failed to create bucket: %v", err)
-		}
+	embeddingsJSON, err := json.Marshal(doc.Embeddings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal embeddings: %v", err)
+	}
 
-		encoded, err := json.Marshal(doc)
-		if err != nil {
-			return fmt.Errorf("failed to marshal document: %v", err)
-		}
+	stmt, err := s.db.Prepare(`
+		INSERT OR REPLACE INTO documents (url, title, description, content, checksum, embeddings)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare upsert statement: %v", err)
+	}
+	defer stmt.Close()
 
-		return b.Put([]byte(doc.URL), encoded)
-	})
+	_, err = stmt.Exec(doc.URL, doc.Title, doc.Description, doc.Content, doc.Checksum, embeddingsJSON)
+	if err != nil {
+		return fmt.Errorf("failed to execute upsert statement: %v", err)
+	}
+	return nil
 }
 
 // GetDocument retrieves a document by its URL.
 func (s *Storage) GetDocument(url string) (*Document, error) {
+	row := s.db.QueryRow("SELECT url, title, description, content, checksum, embeddings FROM documents WHERE url = ?", url)
+
 	var doc Document
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(bucketName)
-		if b == nil {
-			return fmt.Errorf("bucket not found")
-		}
-
-		v := b.Get([]byte(url))
-		if v == nil {
-			return fmt.Errorf("document not found")
-		}
-
-		return json.Unmarshal(v, &doc)
-	})
+	var embeddingsJSON []byte
+	err := row.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON)
 	if err != nil {
-		return nil, err
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("document not found")
+		}
+		return nil, fmt.Errorf("failed to scan document: %v", err)
 	}
+
+	err = json.Unmarshal(embeddingsJSON, &doc.Embeddings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal embeddings: %v", err)
+	}
+
 	return &doc, nil
 }
 
 // DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix.
 func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(bucketName)
-		if b == nil {
-			return nil // Bucket does not exist, nothing to delete
-		}
+	stmt, err := s.db.Prepare("DELETE FROM documents WHERE url LIKE ? || '%' ")
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete statement: %v", err)
+	}
+	defer stmt.Close()
 
-		c := b.Cursor()
-		prefixBytes := []byte(prefix)
-
-		for k, _ := c.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, _ = c.Next() {
-			if err := b.Delete(k); err != nil {
-				// Handle the error, maybe log it or return it
-				return fmt.Errorf("failed to delete key %s: %v", k, err)
-			}
-		}
-
-		return nil
-	})
+	_, err = stmt.Exec(prefix)
+	if err != nil {
+		return fmt.Errorf("failed to execute delete statement: %v", err)
+	}
+	return nil
 }
 
 // ListDocuments retrieves all documents from the store.
 func (s *Storage) ListDocuments() ([]*Document, error) {
+	rows, err := s.db.Query("SELECT url, title, description, content, checksum, embeddings FROM documents")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query documents: %v", err)
+	}
+	defer rows.Close()
+
 	var docs []*Document
-	err := s.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(bucketName)
-		if b == nil {
-			// If the bucket doesn't exist, there are no documents.
-			return nil
+	for rows.Next() {
+		var doc Document
+		var embeddingsJSON []byte
+		if err := rows.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON); err != nil {
+			return nil, fmt.Errorf("failed to scan document row: %v", err)
 		}
 
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			var doc Document
-			if err := json.Unmarshal(v, &doc); err != nil {
-				// Decide how to handle corrupted data. For now, we'll just skip it.
-				// You might want to log this error.
-				continue
-			}
-			docs = append(docs, &doc)
+		if err := json.Unmarshal(embeddingsJSON, &doc.Embeddings); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal embeddings for document %s: %v", doc.URL, err)
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list documents: %v", err)
+		docs = append(docs, &doc)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after iterating rows: %v", err)
+	}
+
 	return docs, nil
 }

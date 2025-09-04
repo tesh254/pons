@@ -7,10 +7,10 @@ require (
 	github.com/fatih/color v1.17.0
 	github.com/google/uuid v1.6.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
+	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/modelcontextprotocol/go-sdk v0.3.1
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.20.1
-	go.etcd.io/bbolt v1.4.3
 	golang.org/x/net v0.43.0
 )
 

@@ -53,25 +53,14 @@ type SearchDatasetTopKArgs struct {
 }
 
 func (c *Core) StartServer(internalAPI *api.API, httpAddress string) error {
-	ctx := context.Background()
-
 	server := mcp.NewServer(&mcp.Implementation{Name: "Pons MCP Server", Version: "v1.0.0"}, nil)
-
 	c.registerTools(server, internalAPI)
 
-	var transport mcp.Transport
 	if httpAddress != "" {
-		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
-			return server
-		}, nil)
-		log.Printf("Pons MCP handler listening at %s", httpAddress)
-		http.ListenAndServe(httpAddress, loggingHandler(handler))
-	} else {
-		transport = &mcp.StdioTransport{}
+		return c.ServeHTTP(server, httpAddress)
 	}
 
-	t := &mcp.LoggingTransport{Transport: transport, Writer: os.Stderr}
-	return server.Run(ctx, t)
+	return c.ServeStdio(server)
 }
 
 func (c *Core) ServeHTTP(server *mcp.Server, httpAddress string) error {
@@ -79,7 +68,7 @@ func (c *Core) ServeHTTP(server *mcp.Server, httpAddress string) error {
 		return server
 	}, nil)
 	log.Printf("Pons MCP handler listening at %s", httpAddress)
-	return http.ListenAndServe(httpAddress, handler)
+	return http.ListenAndServe(httpAddress, loggingHandler(handler))
 }
 
 func (c *Core) ServeStdio(server *mcp.Server) error {
