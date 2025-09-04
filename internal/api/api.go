@@ -1,7 +1,9 @@
+// api.go
 package api
 
 import (
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/tesh254/pons/internal/llm"
@@ -22,15 +24,20 @@ func NewAPI(storage *storage.Storage, llm *llm.Embeddings) *API {
 	}
 }
 
-// StoreDocument stores a new document.
-func (a *API) StoreDocument(url, content, checksum string, embeddings []float32) error {
+// Llm returns the llm instance.
+func (a *API) Llm() *llm.Embeddings {
+	return a.llm
+}
+
+// UpsertDocument stores a new document or updates an existing one.
+func (a *API) UpsertDocument(baseURL, url, content, checksum string, embeddings []float32) error {
 	doc := &storage.Document{
-		URL:        url,
+		URL:        baseURL + url,
 		Content:    content,
 		Checksum:   checksum,
 		Embeddings: embeddings,
 	}
-	return a.storage.StoreDocument(doc)
+	return a.storage.UpsertDocument(doc)
 }
 
 // GetDocument retrieves a document by URL.
@@ -40,13 +47,19 @@ func (a *API) GetDocument(url string) (*storage.Document, error) {
 
 // DeleteDocument deletes a document by URL.
 func (a *API) DeleteDocument(url string) error {
-	return a.storage.DeleteDocument(url)
+	return a.storage.DeleteDocumentsByPrefix(url)
 }
 
-// UpdateDocument updates an existing document.
-func (a *API) UpdateDocument(url, content, checksum string, embeddings []float32) error {
-	// For bbolt, "update" is the same as "store" since Put replaces the value.
-	return a.StoreDocument(url, content, checksum, embeddings)
+type Doc struct {
+	URL         string `json:"url"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
+}
+
+type SearchResult struct {
+	Doc   *Doc
+	Score float64
 }
 
 // Search finds the most similar document to a query embedding.
@@ -65,13 +78,15 @@ func (a *API) Search(queryEmbedding []float32) (*storage.Document, float64, erro
 
 	for _, doc := range docs {
 		if len(doc.Embeddings) == 0 {
+			log.Printf("Skipping document %s due to empty embeddings", doc.URL)
 			continue // Skip documents without embeddings
 		}
 		similarity, err := cosineSimilarity(queryEmbedding, doc.Embeddings)
 		if err != nil {
-			// Log or handle the error for this specific document comparison
+			log.Printf("Error calculating cosine similarity for document %s: %v (queryEmbedding length: %d, doc.Embeddings length: %d)", doc.URL, err, len(queryEmbedding), len(doc.Embeddings))
 			continue
 		}
+		log.Printf("Document %s similarity: %f", doc.URL, similarity)
 
 		if similarity > maxSimilarity {
 			maxSimilarity = similarity
@@ -106,4 +121,14 @@ func cosineSimilarity(a, b []float32) (float64, error) {
 	}
 
 	return dotProduct / (math.Sqrt(aMagnitude) * math.Sqrt(bMagnitude)), nil
+}
+
+// UpsertDirect upserts a document directly.
+func (a *API) UpsertDirect(doc *storage.Document) error {
+	return a.storage.UpsertDocument(doc)
+}
+
+// ListDocuments lists all documents.
+func (a *API) ListDocuments() ([]*storage.Document, error) {
+	return a.storage.ListDocuments()
 }

@@ -21,6 +21,9 @@ var addCmd = &cobra.Command{
 		url := args[0]
 		dbPath := viper.GetString("db")
 		workerURL := viper.GetString("worker-url")
+		verbose, _ := cmd.Flags().GetBool("verbose")
+
+		fmt.Println(url, dbPath, workerURL)
 
 		// Initialize storage
 		st, err := storage.NewStorage(dbPath)
@@ -40,6 +43,7 @@ var addCmd = &cobra.Command{
 
 		// Scrape the URL
 		config := scraper.DefaultConfig()
+		config.Verbose = verbose // Set verbosity for scraper
 		s := scraper.New(url, config)
 		if err := s.GetContent(); err != nil {
 			log.Fatalf("Failed to get content for metadata: %v", err)
@@ -52,8 +56,15 @@ var addCmd = &cobra.Command{
 		}
 
 		// Process and store each page
+		if verbose {
+			fmt.Println("Processing and storing documents...")
+		}
+		parser := &scraper.Parser{}
 		for subpath, content := range s.SubPathsHTMLContent {
-			var parser scraper.Parser
+			if verbose {
+				fmt.Printf("  - Processing %s\n", subpath)
+			}
+
 			// Convert HTML to Markdown
 			markdownContent, err := parser.ToMarkdown(content)
 			if err != nil {
@@ -61,7 +72,14 @@ var addCmd = &cobra.Command{
 				continue
 			}
 
+			// if verbose {
+			// 	fmt.Printf("    - Markdown content for %s:\n%s\n", subpath, markdownContent)
+			// }
+
 			// Generate embeddings
+			if verbose {
+				fmt.Printf("    - Generating embeddings for %s\n", subpath)
+			}
 			embeddings, err := emb.GenerateEmbeddings(markdownContent)
 			if err != nil {
 				log.Printf("Failed to generate embeddings for %s: %v", subpath, err)
@@ -72,16 +90,23 @@ var addCmd = &cobra.Command{
 			checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(markdownContent)))
 
 			// Store document
-			if err := ponsAPI.StoreDocument(subpath, markdownContent, checksum, embeddings); err != nil {
+			if verbose {
+				fmt.Printf("    - Storing document in bbolt: %s\n", subpath)
+			}
+
+			if err := ponsAPI.UpsertDocument(url, subpath, markdownContent, checksum, embeddings); err != nil {
 				log.Printf("Failed to store document for %s: %v", subpath, err)
 				continue
 			}
 
-			fmt.Printf("Successfully added %s\n", subpath)
+			if verbose {
+				fmt.Printf("    - Successfully added %s\n", subpath)
+			}
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(addCmd)
+	addCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }

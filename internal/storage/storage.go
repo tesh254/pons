@@ -1,18 +1,23 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"go.etcd.io/bbolt"
 )
 
 // Document represents the data to be stored.
 type Document struct {
-	URL        string    `json:"url"`
-	Content    string    `json:"content"`
-	Checksum   string    `json:"checksum"`
-	Embeddings []float32 `json:"embeddings"`
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Content     string    `json:"content"`
+	Checksum    string    `json:"checksum"`
+	Embeddings  []float32 `json:"embeddings"`
 }
 
 // Storage manages the bbolt database.
@@ -22,6 +27,12 @@ type Storage struct {
 
 // NewStorage creates or opens a bbolt database.
 func NewStorage(dbPath string) (*Storage, error) {
+	// Ensure the directory exists.
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, fmt.Errorf("failed to create database directory: %v", err)
+	}
+
 	db, err := bbolt.Open(dbPath, 0600, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %v", err)
@@ -37,9 +48,9 @@ func (s *Storage) Close() {
 // bucketName is the name of the bucket where documents are stored.
 var bucketName = []byte("documents")
 
-// StoreDocument stores a document in the database.
+// UpsertDocument stores a document in the database.
 // The URL is used as the key.
-func (s *Storage) StoreDocument(doc *Document) error {
+func (s *Storage) UpsertDocument(doc *Document) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(bucketName)
 		if err != nil {
@@ -77,14 +88,25 @@ func (s *Storage) GetDocument(url string) (*Document, error) {
 	return &doc, nil
 }
 
-// DeleteDocument deletes a document by its URL.
-func (s *Storage) DeleteDocument(url string) error {
+// DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix.
+func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket(bucketName)
 		if b == nil {
-			return fmt.Errorf("bucket not found")
+			return nil // Bucket does not exist, nothing to delete
 		}
-		return b.Delete([]byte(url))
+
+		c := b.Cursor()
+		prefixBytes := []byte(prefix)
+
+		for k, _ := c.Seek(prefixBytes); k != nil && bytes.HasPrefix(k, prefixBytes); k, _ = c.Next() {
+			if err := b.Delete(k); err != nil {
+				// Handle the error, maybe log it or return it
+				return fmt.Errorf("failed to delete key %s: %v", k, err)
+			}
+		}
+
+		return nil
 	})
 }
 

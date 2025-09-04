@@ -17,7 +17,7 @@ var startCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		dbPath := viper.GetString("db")
 		workerURL := viper.GetString("worker-url")
-
+		httpAddress := viper.GetString("http-address")
 		// Initialize storage
 		st, err := storage.NewStorage(dbPath)
 		if err != nil {
@@ -26,9 +26,6 @@ var startCmd = &cobra.Command{
 		defer st.Close()
 
 		// Initialize LLM
-		if workerURL == "" {
-			log.Fatalf("worker-url is required for start command")
-		}
 		emb := llm.NewEmbeddings(workerURL)
 
 		// Initialize API
@@ -36,13 +33,17 @@ var startCmd = &cobra.Command{
 
 		// Start MCP server
 		log.Println("Starting MCP server...")
-		var mcpServer core.Core
-		if err := mcpServer.StartServer(ponsAPI); err != nil {
-			log.Fatalf("Failed to start MCP server: %v", err)
+		mcpServer := &core.Core{}
+		if err := mcpServer.StartServer(ponsAPI, httpAddress); err != nil {
+			log.Fatalf("Server error: %v", err)
 		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(startCmd)
+	startCmd.Flags().String("http-address", "localhost:9014", "HTTP address to listen on")
+	startCmd.Flags().String("transport", "stdio", "Transport type (stdio or http)")
+	viper.BindPFlag("http-address", startCmd.Flags().Lookup("http-address"))
+	viper.BindPFlag("transport", startCmd.Flags().Lookup("transport"))
 }

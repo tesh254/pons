@@ -32,7 +32,7 @@ var listCmd = &cobra.Command{
 		}
 
 		for _, doc := range docs {
-			fmt.Printf("URL: %s\nChecksum: %s\n\n", doc.URL, doc.Checksum)
+			fmt.Printf("URL: %s\nChecksum: %s\nContent Length: %d\nEmbeddings Length: %d\n\n", doc.URL, doc.Checksum, len(doc.Content), len(doc.Embeddings))
 		}
 	},
 }

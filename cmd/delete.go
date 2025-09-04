@@ -20,8 +20,7 @@ var deleteCmd = &cobra.Command{
 		dbPath := viper.GetString("db")
 		workerURL := viper.GetString("worker-url")
 
-	
-st, err := storage.NewStorage(dbPath)
+		st, err := storage.NewStorage(dbPath)
 		if err != nil {
 			log.Fatalf("Failed to initialize storage: %v", err)
 		}

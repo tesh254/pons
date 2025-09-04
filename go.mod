@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/JohannesKaufmann/html-to-markdown/v2 v2.4.0
 	github.com/fatih/color v1.17.0
+	github.com/google/uuid v1.6.0
 	github.com/jedib0t/go-pretty/v6 v6.6.8
 	github.com/modelcontextprotocol/go-sdk v0.3.1
 	github.com/spf13/cobra v1.10.1
@@ -13,11 +14,12 @@ require (
 	golang.org/x/net v0.43.0
 )
 
+require github.com/google/jsonschema-go v0.2.1-0.20250825175020-748c325cec76 // indirect
+
 require (
 	github.com/JohannesKaufmann/dom v0.2.0 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
-	github.com/google/jsonschema-go v0.2.1-0.20250825175020-748c325cec76 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

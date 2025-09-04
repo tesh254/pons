@@ -24,9 +24,14 @@ func NewEmbeddings(workerURL string) *Embeddings {
 
 // embeddingResponse matches the Cloudflare Worker’s JSON response structure.
 type embeddingResponse struct {
-	Response [][]float32 `json:"response"`
-	Shape    []int       `json:"shape"`
-	Pooling  string      `json:"pooling"`
+	Data    [][]float32 `json:"data"`
+	Shape   []int       `json:"shape"`
+	Pooling string      `json:"pooling"`
+	Usage   struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`	
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
 }
 
 // GenerateEmbeddings sends text to the Cloudflare Worker and returns embeddings.
@@ -62,11 +67,13 @@ func (e *Embeddings) GenerateEmbeddings(content string) ([]float32, error) {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
-	if len(result.Response) == 0 || len(result.Response[0]) == 0 {
+	// fmt.Println(result) // Remove this line, it was for debugging
+
+	if len(result.Data) == 0 || len(result.Data[0]) == 0 {
 		return nil, fmt.Errorf("empty embedding returned")
 	}
 
-	return result.Response[0], nil
+	return result.Data[0], nil
 }
 
 // CosineSimilarity computes the cosine similarity between two vectors.
