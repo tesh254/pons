@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   bump_version:
+    needs: test # Only run if tests pass
     name: Bump Version and Create Tag
     runs-on: ubuntu-latest
     outputs:
@@ -46,7 +47,6 @@ jobs:
           git push origin ${{ steps.get_next_version.outputs.new_tag }}
 
   test:
-    needs: bump_version # Ensure version is bumped before testing
     name: Run Tests
     runs-on: ubuntu-latest
     steps:
@@ -306,7 +306,7 @@ jobs:
           echo "- Updated Homebrew formula" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Available Downloads:" >> $GITHUB_STEP_SUMMARY
-          echo "- **macOS**: 	kebrew install tesh254/pons/pons
+          echo "- **macOS**: 	kebrew install tesh254/pons/pons"
           echo "- **Linux/Manual**: Download from [releases page](https://github.com/tesh254/pons/releases/tag/$VERSION)" >> $GITHUB_STEP_SUMMARY
           echo "- **Go install**: 	kgo install github.com/tesh254/pons@$VERSION"
           echo "" >> $GITHUB_STEP_SUMMARY
