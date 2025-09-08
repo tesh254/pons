@@ -306,12 +306,12 @@ jobs:
           echo "- Updated Homebrew formula" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📦 Available Downloads:" >> $GITHUB_STEP_SUMMARY
-          echo "- **macOS**: 	kebrew install tesh254/pons/pons"
+          echo "- **macOS**: 	krew install tesh254/pons/pons"
           echo "- **Linux/Manual**: Download from [releases page](https://github.com/tesh254/pons/releases/tag/$VERSION)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Go install**: 	kgo install github.com/tesh254/pons@$VERSION"
+          echo "- **Go install**: 	go install github.com/tesh254/pons@$VERSION"
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔍 Version Info:" >> $GITHUB_STEP_SUMMARY
           echo "All binaries include automatic version detection via Go's BuildInfo system:" >> $GITHUB_STEP_SUMMARY
-          echo "- 	kpons version" - Detailed version info" >> $GITHUB_STEP_SUMMARY
-          echo "- 	kpons version --json" - JSON format" >> $GITHUB_STEP_SUMMARY
-          echo "- 	kpons buildinfo" - Comprehensive build details" >> $GITHUB_STEP_SUMMARY
+          echo "- 	pons version" - Detailed version info" >> $GITHUB_STEP_SUMMARY
+          echo "- 	pons version --json" - JSON format" >> $GITHUB_STEP_SUMMARY
+          echo "- 	pons buildinfo" - Comprehensive build details" >> $GITHUB_STEP_SUMMARY
