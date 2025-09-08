@@ -54,7 +54,7 @@ func DefaultConfig() *Config {
 	return &Config{
 		UserAgent:     "Mozilla/5.0 (compatible; PonsScraper/1.0)",
 		Timeout:       10 * time.Second,
-		MaxDepth:      3,
+		MaxDepth:      5,
 		RequestDelay:  1 * time.Second,
 		MaxConcurrent: 2,
 		Verbose:       false,

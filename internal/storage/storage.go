@@ -18,6 +18,8 @@ type Document struct {
 	Content     string    `json:"content"`
 	Checksum    string    `json:"checksum"`
 	Embeddings  []float32 `json:"embeddings"`
+	Context     string    `json:"context"`
+	SourceType  string    `json:"source_type"`
 }
 
 // Storage manages the SQLite database.
@@ -53,7 +55,9 @@ func NewStorage(dbPath string) (*Storage, error) {
 		description TEXT,
 		content TEXT,
 		checksum TEXT,
-		embeddings BLOB
+		embeddings BLOB,
+		context TEXT,
+		source_type TEXT
 	);`
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
@@ -69,26 +73,30 @@ func (s *Storage) Close() {
 	s.db.Close()
 }
 
-
+// GetDB returns the underlying *sql.DB connection.
+func (s *Storage) GetDB() *sql.DB {
+	return s.db
+}
 
 // UpsertDocument stores a document in the database.
 // The URL is used as the key.
 func (s *Storage) UpsertDocument(doc *Document) error {
+	// Marshal embeddings to JSON for storage in BLOB column
 	embeddingsJSON, err := json.Marshal(doc.Embeddings)
 	if err != nil {
 		return fmt.Errorf("failed to marshal embeddings: %v", err)
 	}
 
 	stmt, err := s.db.Prepare(`
-		INSERT OR REPLACE INTO documents (url, title, description, content, checksum, embeddings)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT OR REPLACE INTO documents (url, title, description, content, checksum, embeddings, context, source_type)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare upsert statement: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(doc.URL, doc.Title, doc.Description, doc.Content, doc.Checksum, embeddingsJSON)
+	_, err = stmt.Exec(doc.URL, doc.Title, doc.Description, doc.Content, doc.Checksum, embeddingsJSON, doc.Context, doc.SourceType)
 	if err != nil {
 		return fmt.Errorf("failed to execute upsert statement: %v", err)
 	}
@@ -97,11 +105,11 @@ func (s *Storage) UpsertDocument(doc *Document) error {
 
 // GetDocument retrieves a document by its URL.
 func (s *Storage) GetDocument(url string) (*Document, error) {
-	row := s.db.QueryRow("SELECT url, title, description, content, checksum, embeddings FROM documents WHERE url = ?", url)
+	row := s.db.QueryRow("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents WHERE url = ?", url)
 
 	var doc Document
 	var embeddingsJSON []byte
-	err := row.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON)
+	err := row.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON, &doc.Context, &doc.SourceType)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("document not found")
@@ -109,8 +117,8 @@ func (s *Storage) GetDocument(url string) (*Document, error) {
 		return nil, fmt.Errorf("failed to scan document: %v", err)
 	}
 
-	err = json.Unmarshal(embeddingsJSON, &doc.Embeddings)
-	if err != nil {
+	// Unmarshal embeddings from JSON
+	if err := json.Unmarshal(embeddingsJSON, &doc.Embeddings); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal embeddings: %v", err)
 	}
 
@@ -132,9 +140,17 @@ func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
 	return nil
 }
 
-// ListDocuments retrieves all documents from the store.
-func (s *Storage) ListDocuments() ([]*Document, error) {
-	rows, err := s.db.Query("SELECT url, title, description, content, checksum, embeddings FROM documents")
+// ListDocuments retrieves all documents from the store, optionally filtered by context.
+func (s *Storage) ListDocuments(context string) ([]*Document, error) {
+	var rows *sql.Rows
+	var err error
+
+	if context == "" {
+		rows, err = s.db.Query("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents")
+	} else {
+		rows, err = s.db.Query("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents WHERE context = ?", context)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to query documents: %v", err)
 	}
@@ -144,12 +160,13 @@ func (s *Storage) ListDocuments() ([]*Document, error) {
 	for rows.Next() {
 		var doc Document
 		var embeddingsJSON []byte
-		if err := rows.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON); err != nil {
+		if err := rows.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON, &doc.Context, &doc.SourceType); err != nil {
 			return nil, fmt.Errorf("failed to scan document row: %v", err)
 		}
 
+		// Unmarshal embeddings from JSON
 		if err := json.Unmarshal(embeddingsJSON, &doc.Embeddings); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal embeddings for document %s: %v", doc.URL, err)
+			return nil, fmt.Errorf("failed to unmarshal embeddings: %v", err)
 		}
 		docs = append(docs, &doc)
 	}

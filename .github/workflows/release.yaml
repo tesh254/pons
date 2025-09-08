@@ -1,0 +1,318 @@
+name: pons release
+
+on:
+  push:
+    branches:
+      - main # Trigger on push to main
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  bump_version:
+    name: Bump Version and Create Tag
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.get_next_version.outputs.new_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for tags
+
+      - name: Get latest tag and determine next version
+        id: get_next_version
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Extract version parts
+          MAJOR=$(echo $LATEST_TAG | sed 's/v//' | awk -F. '{print $1}')
+          MINOR=$(echo $LATEST_TAG | sed 's/v//' | awk -F. '{print $2}')
+          PATCH=$(echo $LATEST_TAG | sed 's/v//' | awk -F. '{print $3}')
+
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_TAG="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "New tag: $NEW_TAG"
+
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create and push new tag
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git tag ${{ steps.get_next_version.outputs.new_tag }}
+          git push origin ${{ steps.get_next_version.outputs.new_tag }}
+
+  test:
+    needs: bump_version # Ensure version is bumped before testing
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Test version info (development build)
+        run: |
+          go build -o pons-test .
+          echo "=== Testing version extraction ==="
+          ./pons-test version
+          ./pons-test version --json
+          echo "=== Testing build info ==="
+          ./pons-test buildinfo
+          rm pons-test
+
+  build:
+    needs: test
+    name: Build Binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [amd64, arm64]
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: macos-latest
+            platform: darwin
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Build Binary
+        env:
+          GOOS: ${{ matrix.platform }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          # Build with BuildInfo - no ldflags needed!
+          go build -o dist/pons-${{ matrix.platform }}-${{ matrix.arch }} .
+          cd dist && ln -s pons-${{ matrix.platform }}-${{ matrix.arch }} mgr-${{ matrix.platform }}-${{ matrix.arch }}
+
+      - name: Test version info
+        if: matrix.platform == 'linux' && matrix.arch == 'amd64'
+        run: |
+          echo "=== Testing built binary version info ==="
+          ./dist/pons-linux-amd64 version
+          echo ""
+          echo "=== Testing JSON output ==="
+          ./dist/pons-linux-amd64 version --json
+          echo ""
+          echo "=== Testing short version ==="
+          ./dist/pons-linux-amd64 version --short
+          echo ""
+          echo "=== Testing build info ==="
+          ./dist/pons-linux-amd64 buildinfo
+
+      - name: Verify mgr symlink
+        if: matrix.platform == 'linux' && matrix.arch == 'amd64'
+        run: |
+          echo "=== Testing mgr symlink ==="
+          ./dist/mgr-linux-amd64 version --short
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pons-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            dist/pons-${{ matrix.platform }}-${{ matrix.arch }}
+            dist/mgr-${{ matrix.platform }}-${{ matrix.arch }}
+          compression-level: 9
+          retention-days: 5
+
+  release:
+    needs: build
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') # This job will now be triggered by the tag pushed by bump_version
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Test downloaded artifacts
+        run: |
+          cd artifacts
+          echo "=== Downloaded files ==="
+          ls -la
+          echo ""
+          echo "=== Testing Linux binary version ==="
+          chmod +x pons-linux-amd64
+          ./pons-linux-amd64 version
+          echo ""
+          echo "=== Verifying this is a release build ==="
+          ./pons-linux-amd64 version --json | grep -E '"version"|"is_modified"'
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          for file in pons-*; do
+            if [ -f "$file" ] && [ ! -L "$file" ]; then
+              sha256sum "$file" >> ../checksums.txt
+            fi
+          done
+          echo "=== Generated checksums ==="
+          cat ../checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/pons-*
+            checksums.txt
+          name: Release ${{ github.ref_name }}
+          body_path: ${{ github.workspace }}/CHANGELOG.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-homebrew:
+    needs: release
+    name: Update Homebrew Formula
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate checksums
+        run: |
+          VERSION=${{ github.ref_name }}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Add sleep to ensure release assets are available
+          sleep 45
+
+          # Download the released binaries
+          curl -LO "https://github.com/tesh254/pons/releases/download/$VERSION/pons-darwin-amd64"
+          curl -LO "https://github.com/tesh254/pons/releases/download/$VERSION/pons-darwin-arm64"
+
+          # Test the downloaded binaries
+          chmod +x pons-darwin-amd64 pons-darwin-arm64
+          echo "=== Testing downloaded macOS binaries ==="
+          echo "AMD64 version:"
+          file pons-darwin-amd64
+          echo "ARM64 version:"
+          file pons-darwin-arm64
+
+          # Calculate SHA256 checksums
+          echo "SHA256_INTEL=$(sha256sum pons-darwin-amd64 | awk '{print $1}')" >> $GITHUB_ENV
+          echo "SHA256_ARM=$(sha256sum pons-darwin-arm64 | awk '{print $1}')" >> $GITHUB_ENV
+
+      - name: Update Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          # Clone the Homebrew tap repository
+          git clone https://$HOMEBREW_TAP_TOKEN@github.com/tesh254/homebrew-pons.git
+          cd homebrew-pons
+
+          # Update the formula with BuildInfo support
+          cat > pons.rb << EOL
+          class Pons < Formula
+            desc "A robust CLI tool used to organize and automate complex workflows with templated commands"
+            homepage "https://github.com/tesh254/pons"
+            version "${VERSION#v}"
+
+            on_macos do
+              if Hardware::CPU.intel?
+                url "https://github.com/tesh254/pons/releases/download/${VERSION}/pons-darwin-amd64"
+                sha256 "$SHA256_INTEL"
+              else
+                url "https://github.com/tesh254/pons/releases/download/${VERSION}/pons-darwin-arm64"
+                sha256 "$SHA256_ARM"
+              end
+            end
+
+            def install
+              bin.install Dir["pons-*"][0] => "pons"
+              # Create the mgr alias
+              bin.install_symlink "pons" => "pn"
+            end
+
+            test do
+              # Test basic version command
+              system "#{bin}/pons", "--version"
+              system "#{bin}/pn", "--version"
+              
+              # Test BuildInfo version commands
+              assert_match version.to_s, shell_output("#{bin}/pons version --short")
+              assert_match "Platform:", shell_output("#{bin}/pons version")
+              
+              # Test JSON output is valid
+              json_output = shell_output("#{bin}/pons version --json")
+              assert_match "version", json_output
+              assert_match "platform", json_output
+            end
+          end
+          EOL
+
+          # Commit and push the changes
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+          git add pons.rb
+          git commit -m "Update pons to ${VERSION} (BuildInfo support)"
+          git push
+
+  release-summary:
+    needs: [release, publish-homebrew]
+    name: Release Summary
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Summary
+        run: |
+          VERSION=${{ github.ref_name }}
+          echo "## 🎉 Release Summary for $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ✅ Completed Tasks:" >> $GITHUB_STEP_SUMMARY
+          echo "- Built binaries for Linux and macOS (amd64 + arm64)" >> $GITHUB_STEP_SUMMARY
+          echo "- Tested BuildInfo version extraction" >> $GITHUB_STEP_SUMMARY
+          echo "- Generated checksums" >> $GITHUB_STEP_SUMMARY
+          echo "- Created GitHub release with artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Updated Homebrew formula" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Available Downloads:" >> $GITHUB_STEP_SUMMARY
+          echo "- **macOS**: `brew install tesh254/pons/pons`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Linux/Manual**: Download from [releases page](https://github.com/tesh254/pons/releases/tag/$VERSION)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Go install**: `go install github.com/tesh254/pons@$VERSION`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Version Info:" >> $GITHUB_STEP_SUMMARY
+          echo "All binaries include automatic version detection via Go's BuildInfo system:" >> $GITHUB_STEP_SUMMARY
+          echo "- `pons version` - Detailed version info" >> $GITHUB_STEP_SUMMARY
+          echo "- `pons version --json` - JSON format" >> $GITHUB_STEP_SUMMARY
+          echo "- `pons buildinfo` - Comprehensive build details" >> $GITHUB_STEP_SUMMARY
