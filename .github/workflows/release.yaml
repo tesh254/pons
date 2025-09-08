@@ -171,8 +171,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd artifacts
-          for file in pons-*;
-          do
+          for file in pons-*; do
             if [ -f "$file" ] && [ ! -L "$file" ]; then
               sha256sum "$file" >> ../checksums.txt
             fi
@@ -304,14 +303,3 @@ jobs:
           echo "- Generated checksums" >> $GITHUB_STEP_SUMMARY
           echo "- Created GitHub release with artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- Updated Homebrew formula" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Available Downloads:" >> $GITHUB_STEP_SUMMARY
-          echo "- **macOS**: 	krew install tesh254/pons/pons"
-          echo "- **Linux/Manual**: Download from [releases page](https://github.com/tesh254/pons/releases/tag/$VERSION)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Go install**: 	go install github.com/tesh254/pons@$VERSION"
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔍 Version Info:" >> $GITHUB_STEP_SUMMARY
-          echo "All binaries include automatic version detection via Go's BuildInfo system:" >> $GITHUB_STEP_SUMMARY
-          echo "- 	pons version" - Detailed version info" >> $GITHUB_STEP_SUMMARY
-          echo "- 	pons version --json" - JSON format" >> $GITHUB_STEP_SUMMARY
-          echo "- 	pons buildinfo" - Comprehensive build details" >> $GITHUB_STEP_SUMMARY
