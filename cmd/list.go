@@ -23,7 +23,7 @@ var listCmd = &cobra.Command{
 		}
 		defer st.Close()
 
-		docs, err := st.ListDocuments()
+		docs, err := st.ListDocuments("")
 		if err != nil {
 			log.Fatalf("Failed to list documents: %v", err)
 		}
@@ -34,7 +34,7 @@ var listCmd = &cobra.Command{
 		}
 
 		for _, doc := range docs {
-			fmt.Printf("URL: %s\nChecksum: %s\nContent Length: %d\nEmbeddings Length: %d\n\n", doc.URL, doc.Checksum, len(doc.Content), len(doc.Embeddings))
+			fmt.Printf("URL: %s\nSource Type: %s\nChecksum: %s\nContent Length: %d\nEmbeddings Length: %d\n\n", doc.URL, doc.SourceType, doc.Checksum, len(doc.Content), len(doc.Embeddings))
 		}
 	},
 }

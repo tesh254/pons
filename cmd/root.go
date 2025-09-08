@@ -12,9 +12,10 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "pons",
-	Short: "Pons is a tool for creating and querying a local knowledge base.",
-	Long:  `Pons is a CLI tool that allows you to scrape websites, generate embeddings, and store them in a local vector database. You can then query the database using natural language.`,
+	Use:     "pons",
+	Aliases: []string{"pn"},
+	Short:   "Pons is a tool for creating and querying a local knowledge base.",
+	Long:    `Pons is a CLI tool that allows you to scrape websites, generate embeddings, and store them in a local vector database. You can then query the database using natural language.`,
 }
 
 func Execute() {

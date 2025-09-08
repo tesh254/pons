@@ -1,10 +1,10 @@
-// api.go
 package api
 
 import (
 	"fmt"
 	"log"
 	"math"
+	"sort"
 
 	"github.com/tesh254/pons/internal/llm"
 	"github.com/tesh254/pons/internal/storage"
@@ -30,12 +30,16 @@ func (a *API) Llm() *llm.Embeddings {
 }
 
 // UpsertDocument stores a new document or updates an existing one.
-func (a *API) UpsertDocument(baseURL, url, content, checksum string, embeddings []float32) error {
+func (a *API) UpsertDocument(baseURL, url, title, description, content, checksum, context, sourceType string, embeddings []float32) error {
 	doc := &storage.Document{
-		URL:        baseURL + url,
-		Content:    content,
-		Checksum:   checksum,
-		Embeddings: embeddings,
+		URL:         baseURL + url,
+		Title:       title,
+		Description: description,
+		Content:     content,
+		Checksum:    checksum,
+		Embeddings:  embeddings,
+		Context:     context,
+		SourceType:  sourceType,
 	}
 	return a.storage.UpsertDocument(doc)
 }
@@ -50,31 +54,23 @@ func (a *API) DeleteDocument(url string) error {
 	return a.storage.DeleteDocumentsByPrefix(url)
 }
 
-type Doc struct {
-	URL         string `json:"url"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Content     string `json:"content"`
-}
-
 type SearchResult struct {
-	Doc   *Doc
+	Doc   *storage.Document
 	Score float64
 }
 
-// Search finds the most similar document to a query embedding.
-func (a *API) Search(queryEmbedding []float32) (*storage.Document, float64, error) {
-	docs, err := a.storage.ListDocuments()
+// Search finds the most similar documents to a query embedding, up to numResults, optionally filtered by context.
+func (a *API) Search(queryEmbedding []float32, numResults int, context string) ([]SearchResult, error) {
+	docs, err := a.storage.ListDocuments(context)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list documents for search: %v", err)
+		return nil, fmt.Errorf("failed to list documents for search: %v", err)
 	}
 
 	if len(docs) == 0 {
-		return nil, 0, fmt.Errorf("no documents in storage to search")
+		return nil, fmt.Errorf("no documents in storage to search")
 	}
 
-	var bestDoc *storage.Document
-	maxSimilarity := -1.0
+	var results []SearchResult
 
 	for _, doc := range docs {
 		if len(doc.Embeddings) == 0 {
@@ -86,19 +82,22 @@ func (a *API) Search(queryEmbedding []float32) (*storage.Document, float64, erro
 			log.Printf("Error calculating cosine similarity for document %s: %v (queryEmbedding length: %d, doc.Embeddings length: %d)", doc.URL, err, len(queryEmbedding), len(doc.Embeddings))
 			continue
 		}
-		log.Printf("Document %s similarity: %f", doc.URL, similarity)
+		// log.Printf("Document %s similarity: %f", doc.URL, similarity) // Commented out for less verbose logging
 
-		if similarity > maxSimilarity {
-			maxSimilarity = similarity
-			bestDoc = doc
-		}
+		results = append(results, SearchResult{Doc: doc, Score: similarity})
 	}
 
-	if bestDoc == nil {
-		return nil, 0, fmt.Errorf("could not find a suitable document")
+	// Sort results by similarity in descending order
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	// Return top N results
+	if len(results) > numResults {
+		return results[:numResults], nil
 	}
 
-	return bestDoc, maxSimilarity, nil
+	return results, nil
 }
 
 // cosineSimilarity computes the cosine similarity between two vectors.
@@ -128,7 +127,7 @@ func (a *API) UpsertDirect(doc *storage.Document) error {
 	return a.storage.UpsertDocument(doc)
 }
 
-// ListDocuments lists all documents.
-func (a *API) ListDocuments() ([]*storage.Document, error) {
-	return a.storage.ListDocuments()
+// ListDocuments lists all documents, optionally filtered by context.
+func (a *API) ListDocuments(context string) ([]*storage.Document, error) {
+	return a.storage.ListDocuments(context)
 }
