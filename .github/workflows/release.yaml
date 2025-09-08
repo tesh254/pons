@@ -254,7 +254,7 @@ jobs:
             end
 
             def install
-              bin.install Dir["pons-*"][0] => "pons"
+              bin.install Dir["pons-"][0] => "pons"
               # Create the mgr alias
               bin.install_symlink "pons" => "pn"
             end
@@ -314,4 +314,4 @@ jobs:
           echo "All binaries include automatic version detection via Go's BuildInfo system:" >> $GITHUB_STEP_SUMMARY
           echo "- 	kpons version" - Detailed version info" >> $GITHUB_STEP_SUMMARY
           echo "- 	kpons version --json" - JSON format" >> $GITHUB_STEP_SUMMARY
-          echo "- 	kpons buildinfo" - Comprehensive build details"
+          echo "- 	kpons buildinfo" - Comprehensive build details" >> $GITHUB_STEP_SUMMARY
