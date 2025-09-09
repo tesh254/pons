@@ -22,7 +22,7 @@ command_exists() {
 }
 
 # Detect OS and architecture
-delect_platform() {
+detect_platform() {
     local platform=""
     local architecture=""
 
