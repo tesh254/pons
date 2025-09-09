@@ -113,7 +113,7 @@ To start the server, use the `pons start` command:
 pons start
 ```
 
-By default, the server listens on `http://localhost:8080`. You can specify a different address and port using the `--http-address` flag:
+By default, the server listens on `http://localhost:9014`. You can specify a different address and port using the `--http-address` flag:
 
 ```bash
 pons start --http-address "0.0.0.0:8081"
