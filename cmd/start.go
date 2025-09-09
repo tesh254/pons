@@ -21,6 +21,11 @@ var startCmd = &cobra.Command{
 		dbPath := filepath.Join(home, ".pons_data", "pons.db")
 		workerURL := "https://vectors.madebyknnls.com"
 		httpAddress := viper.GetString("http-address")
+		transport := viper.GetString("transport")
+
+		if transport == "stdio" {
+			httpAddress = ""
+		}
 
 		log.Printf("DB Path: %s", dbPath)
 		log.Printf("Worker URL: %s", workerURL)
