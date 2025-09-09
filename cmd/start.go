@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"log"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -17,8 +15,7 @@ var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Starts the MCP server",
 	Run: func(cmd *cobra.Command, args []string) {
-		home, _ := os.UserHomeDir()
-		dbPath := filepath.Join(home, ".pons_data", "pons.db")
+		dbPath := viper.GetString("db")
 		workerURL := "https://vectors.madebyknnls.com"
 		httpAddress := viper.GetString("http-address")
 		transport := viper.GetString("transport")

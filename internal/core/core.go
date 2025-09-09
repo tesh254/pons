@@ -97,6 +97,16 @@ type DocumentOutput struct {
 	Checksum    string `json:"checksum"`
 }
 
+// New struct to include score for search results
+type SearchOutput struct {
+	URL         string  `json:"url"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Content     string  `json:"content"`
+	Checksum    string  `json:"checksum"`
+	Score       float64 `json:"score"`
+}
+
 func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "search_dataset",
@@ -104,7 +114,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchDataset) (*mcp.CallToolResult, any, error) {
 		query := args.Query
 		queryEmbedding, _ := internalAPI.Llm().GenerateEmbeddings(query)
-		results, err := internalAPI.Search(queryEmbedding, 1, args.ConversationID) // Search for 1 result, use ConversationID as context
+		results, err := internalAPI.Search(queryEmbedding, 3, args.ConversationID) // Search for 3 results
 		if err != nil {
 			return nil, nil, err
 		}
@@ -113,17 +123,19 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 			return nil, nil, fmt.Errorf("no relevant documents found")
 		}
 
-		doc := results[0].Doc // Take the first (most relevant) document
-
-		docOutput := DocumentOutput{
-			URL:         doc.URL,
-			Title:       doc.Title,
-			Description: doc.Description,
-			Content:     doc.Content,
-			Checksum:    doc.Checksum,
+		var searchOutputs []SearchOutput
+		for _, res := range results {
+			searchOutputs = append(searchOutputs, SearchOutput{
+				URL:         res.Doc.URL,
+				Title:       res.Doc.Title,
+				Description: res.Doc.Description,
+				Content:     res.Doc.Content,
+				Checksum:    res.Doc.Checksum,
+				Score:       res.Score, // Include the score
+			})
 		}
 
-		result, err := json.Marshal(map[string]interface{}{"document": docOutput})
+		result, err := json.Marshal(map[string]interface{}{"documents": searchOutputs}) // Change "document" to "documents" and marshal the slice
 		if err != nil {
 			return nil, nil, err
 		}
