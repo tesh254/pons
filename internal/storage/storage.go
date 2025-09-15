@@ -103,9 +103,35 @@ func (s *Storage) UpsertDocument(doc *Document) error {
 	return nil
 }
 
-// GetDocument retrieves a document by its URL.
-func (s *Storage) GetDocument(url string) (*Document, error) {
-	row := s.db.QueryRow("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents WHERE url = ?", url)
+
+
+// DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix.
+func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
+	stmt, err := s.db.Prepare("DELETE FROM documents WHERE url LIKE ? || '%' ")
+	if err != nil {
+		return fmt.Errorf("failed to prepare delete statement: %v", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(prefix)
+	if err != nil {
+		return fmt.Errorf("failed to execute delete statement: %v", err)
+	}
+	return nil
+}
+
+// GetDocument retrieves a document by its URL, optionally filtered by context.
+func (s *Storage) GetDocument(url, context string) (*Document, error) {
+	var row *sql.Row
+	query := "SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents WHERE url = ?"
+	args := []interface{}{url}
+
+	if context != "" {
+		query += " AND context = ?"
+		args = append(args, context)
+	}
+
+	row = s.db.QueryRow(query, args...)
 
 	var doc Document
 	var embeddingsJSON []byte
@@ -125,32 +151,23 @@ func (s *Storage) GetDocument(url string) (*Document, error) {
 	return &doc, nil
 }
 
-// DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix.
-func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
-	stmt, err := s.db.Prepare("DELETE FROM documents WHERE url LIKE ? || '%' ")
-	if err != nil {
-		return fmt.Errorf("failed to prepare delete statement: %v", err)
-	}
-	defer stmt.Close()
-
-	_, err = stmt.Exec(prefix)
-	if err != nil {
-		return fmt.Errorf("failed to execute delete statement: %v", err)
-	}
-	return nil
-}
-
-// ListDocuments retrieves all documents from the store, optionally filtered by context.
-func (s *Storage) ListDocuments(context string) ([]*Document, error) {
+// ListDocuments retrieves documents from the store, optionally filtered by context, with a limit.
+func (s *Storage) ListDocuments(context string, limit int) ([]*Document, error) {
 	var rows *sql.Rows
 	var err error
 
-	if context == "" {
-		rows, err = s.db.Query("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents")
-	} else {
-		rows, err = s.db.Query("SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents WHERE context = ?", context)
+	query := "SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents"
+	args := []interface{}{}
+
+	if context != "" {
+		query += " WHERE context = ?"
+		args = append(args, context)
 	}
 
+	query += " LIMIT ?"
+	args = append(args, limit)
+
+	rows, err = s.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query documents: %v", err)
 	}

@@ -186,7 +186,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Name:        "list_documents",
 		Description: "Lists stored documents in the knowledge base with pagination, optionally filtered by context.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ListDocumentsArgs) (*mcp.CallToolResult, any, error) {
-		docs, err := internalAPI.ListDocuments(args.ConversationID)
+		docs, err := internalAPI.ListDocuments(args.ConversationID, args.Limit)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -207,7 +207,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Name:        "get_document",
 		Description: "Retrieves a specific document from the knowledge base by URL.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetDocumentArgs) (*mcp.CallToolResult, any, error) {
-		doc, err := internalAPI.GetDocument(args.URL)
+		doc, err := internalAPI.GetDocument(args.URL, args.ConversationID)
 		if err != nil {
 			return nil, nil, err
 		}

@@ -45,8 +45,8 @@ func (a *API) UpsertDocument(baseURL, url, title, description, content, checksum
 }
 
 // GetDocument retrieves a document by URL.
-func (a *API) GetDocument(url string) (*storage.Document, error) {
-	return a.storage.GetDocument(url)
+func (a *API) GetDocument(url, context string) (*storage.Document, error) {
+	return a.storage.GetDocument(url, context)
 }
 
 // DeleteDocument deletes a document by URL.
@@ -61,7 +61,7 @@ type SearchResult struct {
 
 // Search finds the most similar documents to a query embedding, up to numResults, optionally filtered by context.
 func (a *API) Search(queryEmbedding []float32, numResults int, context string) ([]SearchResult, error) {
-	docs, err := a.storage.ListDocuments(context)
+	docs, err := a.storage.ListDocuments(context, numResults)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list documents for search: %v", err)
 	}
@@ -128,6 +128,9 @@ func (a *API) UpsertDirect(doc *storage.Document) error {
 }
 
 // ListDocuments lists all documents, optionally filtered by context.
-func (a *API) ListDocuments(context string) ([]*storage.Document, error) {
-	return a.storage.ListDocuments(context)
+func (a *API) ListDocuments(context string, limit int) ([]*storage.Document, error) {
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+	return a.storage.ListDocuments(context, limit)
 }

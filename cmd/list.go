@@ -23,7 +23,7 @@ var listCmd = &cobra.Command{
 		}
 		defer st.Close()
 
-		docs, err := st.ListDocuments("")
+		docs, err := st.ListDocuments("", 1000)
 		if err != nil {
 			log.Fatalf("Failed to list documents: %v", err)
 		}
