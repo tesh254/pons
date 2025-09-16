@@ -90,7 +90,7 @@ var searchCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(searchCmd)
-	searchCmd.Flags().IntP("num-results", "n", 5, "Number of search results to return")
+	searchCmd.Flags().IntP("num-results", "n", 3, "Number of search results to return")
 	searchCmd.Flags().StringP("context", "c", "", "Context to search within (e.g., 'shopify-admin')")
 	searchCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }
