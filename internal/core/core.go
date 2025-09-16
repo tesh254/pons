@@ -23,36 +23,36 @@ type Content struct {
 }
 
 type SearchDocChunks struct {
-	Query string `json:"query" jsonschema:"required"`
+	Query   string `json:"query" jsonschema:"required"`
 	Context string `json:"context,omitempty"`
 }
 
 type UpsertDocumentArgs struct {
 	URL         string `json:"url" jsonschema:"required"`
-	Content     string `json:"content" jsonschema:"required"`	
+	Content     string `json:"content" jsonschema:"required"`
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	Context string `json:"context,omitempty"`
+	Context     string `json:"context,omitempty"`
 }
 
 type DeleteDocumentArgs struct {
 	URLPrefix string `json:"url_prefix" jsonschema:"required"`
-	Context string `json:"context,omitempty"`
+	Context   string `json:"context,omitempty"`
 }
 
 type ListDocumentsArgs struct {
-	Limit  int `json:"limit,omitempty"`
-	Offset int `json:"offset,omitempty"`
+	Limit   int    `json:"limit,omitempty"`
+	Offset  int    `json:"offset,omitempty"`
 	Context string `json:"context,omitempty"`
 }
 
 type GetDocumentArgs struct {
-	URL string `json:"url" jsonschema:"required"`
+	URL     string `json:"url" jsonschema:"required"`
 	Context string `json:"context,omitempty"`
 }
 
 type LearnApiArgs struct {
-	Api            string `json:"api" jsonschema:"required"`
+	Api     string `json:"api" jsonschema:"required"`
 	Context string `json:"context,omitempty"`
 }
 
@@ -230,7 +230,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetContextArgs) (*mcp.CallToolResult, any, error) {
 		contexts, err := internalAPI.GetContexts()
 		if err != nil {
-			return nil, nil, err	
+			return nil, nil, err
 		}
 
 		result, err := json.Marshal(map[string]interface{}{"contexts": contexts})
@@ -238,73 +238,6 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 			return nil, nil, err
 		}
 
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: string(result)},
-			},
-		}, nil, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "learn_api",
-		Description: `🚨 MANDATORY FIRST STEP: This tool MUST be called before any other Pons tools.
-
-⚠️ ALL OTHER PONS TOOLS WILL FAIL without a context from this tool.
-This tool generates a context that is REQUIRED for all subsequent tool calls. After calling this tool, you MUST extract the context from the response and pass it to every other Pons tool call.
-
-🔄 MULTIPLE CONTEXT SUPPORT: You MUST call this tool multiple times in the same conversation when you need to learn about different documentation contexts. THIS IS NOT OPTIONAL. Just pass the existing context to maintain conversation continuity while loading the new context.
-
-For example, a user might ask a question about the 'admin' context, then switch to the 'functions' context, then ask a question about 'polaris' UI components. In this case, you would call learn_api three times with the following arguments:
-
-- learn_api(api: "admin") -> context: "admin"
-- learn_api(api: "functions", context: "admin") -> context: "functions"
-- learn_api(api: "polaris", context: "functions") -> context: "polaris"
-
-This is because the context is used to maintain conversation continuity while loading the new context.
-
-🚨 Valid arguments for api are:
-    - Any string representing a documentation context (e.g., "shopify-admin", "my-project-docs", "general-knowledge"). This string will be used as the context for subsequent tool calls.
-
-🔄 WORKFLOW:
-1. Call learn_api first with the initial API (context)
-2. Extract the context from the response
-3. Pass that same context to ALL other Pons tools
-4. If you need to know more about a different context at any point in the conversation, call learn_api again with the new API (context) and the same context
-
-DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
-PREFER THE USE OF THE search_doc_chunks TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.`,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args LearnApiArgs) (*mcp.CallToolResult, any, error) {
-		// In Pons, the 'api' directly maps to the 'context'
-		// We simply return the 'api' string as the context.
-		// If a context is passed, it means we are switching context.
-
-		context := args.Api // The new context is the context
-
-		// You could add logic here to validate if the 'api' (context) exists
-		// For now, we'll assume any string is a valid context.
-
-		result, err := json.Marshal(map[string]interface{}{"context": context})
-		if err != nil {
-			return nil, nil, err
-		}
-
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: string(result)},
-			},
-		}, nil, nil
-	})
-
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "get_context",
-		Description: "Retrieves the current context or a list of available contexts.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetContextArgs) (*mcp.CallToolResult, any, error) {
-		// For now, we simply return the context that was passed in.
-		// In a more advanced implementation, this could list all available contexts.
-		result, err := json.Marshal(map[string]interface{}{"context": args.Context})
-		if err != nil {
-			return nil, nil, err
-		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: string(result)},
