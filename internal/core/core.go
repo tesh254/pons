@@ -24,7 +24,7 @@ type Content struct {
 
 type SearchDocChunks struct {
 	Query string `json:"query" jsonschema:"required"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
 }
 
 type UpsertDocumentArgs struct {
@@ -32,28 +32,32 @@ type UpsertDocumentArgs struct {
 	Content     string `json:"content" jsonschema:"required"`	
 	Title       string `json:"title,omitempty"`
 	Description string `json:"description,omitempty"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
 }
 
 type DeleteDocumentArgs struct {
 	URLPrefix string `json:"url_prefix" jsonschema:"required"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
 }
 
 type ListDocumentsArgs struct {
 	Limit  int `json:"limit,omitempty"`
 	Offset int `json:"offset,omitempty"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
 }
 
 type GetDocumentArgs struct {
 	URL string `json:"url" jsonschema:"required"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
 }
 
 type LearnApiArgs struct {
 	Api            string `json:"api" jsonschema:"required"`
-	ConversationID string `json:"conversationId,omitempty"`
+	Context string `json:"context,omitempty"`
+}
+
+type GetContextArgs struct {
+	Context string `json:"context,omitempty"`
 }
 
 type SearchDatasetTopKArgs struct {
@@ -113,10 +117,9 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Description: "Searches the knowledge base for relevant documentation and code examples based on a query string.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchDocChunks) (*mcp.CallToolResult, any, error) {
 		query := args.Query
-		queryEmbedding, _ := internalAPI.Llm().GenerateEmbeddings(query)
-		results, err := internalAPI.Search(queryEmbedding, 3, args.ConversationID)
+		results, err := internalAPI.Search(query, 3, args.Context) // Pass query string directly
 		if err != nil {
-			if err.Error() == "no documents in storage to search" {
+			if err.Error() == "no documents found for search" { // Updated error message
 				return nil, nil, fmt.Errorf("no relevant documents found")
 			}
 			return nil, nil, err
@@ -166,7 +169,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 			Content:     args.Content,
 			Checksum:    checksum,
 			Embeddings:  embeddings,
-			Context:     args.ConversationID,
+			Context:     args.Context,
 		}
 		if err := internalAPI.UpsertDirect(doc); err != nil {
 			return nil, nil, err
@@ -178,7 +181,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Name:        "delete_document",
 		Description: "Deletes documents from the knowledge base by URL prefix.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args DeleteDocumentArgs) (*mcp.CallToolResult, any, error) {
-		err := internalAPI.DeleteDocument(args.URLPrefix)
+		err := internalAPI.DeleteDocument(args.URLPrefix, args.Context)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -189,7 +192,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Name:        "list_documents",
 		Description: "Lists stored documents in the knowledge base with pagination, optionally filtered by context.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ListDocumentsArgs) (*mcp.CallToolResult, any, error) {
-		docs, err := internalAPI.ListDocuments(args.ConversationID, args.Limit)
+		docs, err := internalAPI.ListDocuments(args.Context, args.Limit)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -210,7 +213,7 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 		Name:        "get_document",
 		Description: "Retrieves a specific document from the knowledge base by URL.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetDocumentArgs) (*mcp.CallToolResult, any, error) {
-		doc, err := internalAPI.GetDocument(args.URL, args.ConversationID)
+		doc, err := internalAPI.GetDocument(args.URL, args.Context)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -222,48 +225,86 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "learn_api",
-		Description: `🚨 MANDATORY FIRST STEP: This tool MUST be called before any other Pons tools.
+		Name:        "get_contexts",
+		Description: "Retrieves a list of unique contexts from the knowledge base.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetContextArgs) (*mcp.CallToolResult, any, error) {
+		contexts, err := internalAPI.GetContexts()
+		if err != nil {
+			return nil, nil, err	
+		}
 
-⚠️ ALL OTHER PONS TOOLS WILL FAIL without a conversationId from this tool.
-This tool generates a conversationId that is REQUIRED for all subsequent tool calls. After calling this tool, you MUST extract the conversationId from the response and pass it to every other Pons tool call.
-
-🔄 MULTIPLE CONTEXT SUPPORT: You MUST call this tool multiple times in the same conversation when you need to learn about different documentation contexts. THIS IS NOT OPTIONAL. Just pass the existing conversationId to maintain conversation continuity while loading the new context.
-
-For example, a user might ask a question about the 'admin' context, then switch to the 'functions' context, then ask a question about 'polaris' UI components. In this case, you would call learn_api three times with the following arguments:
-
-- learn_api(api: "admin") -> conversationId: "admin"
-- learn_api(api: "functions", conversationId: "admin") -> conversationId: "functions"
-- learn_api(api: "polaris", conversationId: "functions") -> conversationId: "polaris"
-
-This is because the conversationId is used to maintain conversation continuity while loading the new context.
-
-🚨 Valid arguments for api are:
-    - Any string representing a documentation context (e.g., "shopify-admin", "my-project-docs", "general-knowledge"). This string will be used as the conversationId for subsequent tool calls.
-
-🔄 WORKFLOW:
-1. Call learn_api first with the initial API (context)
-2. Extract the conversationId from the response
-3. Pass that same conversationId to ALL other Pons tools
-4. If you need to know more about a different context at any point in the conversation, call learn_api again with the new API (context) and the same conversationId
-
-DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
-PREFER THE USE OF THE search_doc_chunks TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.`,
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args LearnApiArgs) (*mcp.CallToolResult, any, error) {
-		// In Pons, the 'api' directly maps to the 'context' (conversationId)
-		// We simply return the 'api' string as the conversationId.
-		// If a conversationId is passed, it means we are switching context.
-
-		conversationId := args.Api // The new context is the conversationId
-
-		// You could add logic here to validate if the 'api' (context) exists
-		// For now, we'll assume any string is a valid context.
-
-		result, err := json.Marshal(map[string]interface{}{"conversationId": conversationId})
+		result, err := json.Marshal(map[string]interface{}{"contexts": contexts})
 		if err != nil {
 			return nil, nil, err
 		}
 
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: string(result)},
+			},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "learn_api",
+		Description: `🚨 MANDATORY FIRST STEP: This tool MUST be called before any other Pons tools.
+
+⚠️ ALL OTHER PONS TOOLS WILL FAIL without a context from this tool.
+This tool generates a context that is REQUIRED for all subsequent tool calls. After calling this tool, you MUST extract the context from the response and pass it to every other Pons tool call.
+
+🔄 MULTIPLE CONTEXT SUPPORT: You MUST call this tool multiple times in the same conversation when you need to learn about different documentation contexts. THIS IS NOT OPTIONAL. Just pass the existing context to maintain conversation continuity while loading the new context.
+
+For example, a user might ask a question about the 'admin' context, then switch to the 'functions' context, then ask a question about 'polaris' UI components. In this case, you would call learn_api three times with the following arguments:
+
+- learn_api(api: "admin") -> context: "admin"
+- learn_api(api: "functions", context: "admin") -> context: "functions"
+- learn_api(api: "polaris", context: "functions") -> context: "polaris"
+
+This is because the context is used to maintain conversation continuity while loading the new context.
+
+🚨 Valid arguments for api are:
+    - Any string representing a documentation context (e.g., "shopify-admin", "my-project-docs", "general-knowledge"). This string will be used as the context for subsequent tool calls.
+
+🔄 WORKFLOW:
+1. Call learn_api first with the initial API (context)
+2. Extract the context from the response
+3. Pass that same context to ALL other Pons tools
+4. If you need to know more about a different context at any point in the conversation, call learn_api again with the new API (context) and the same context
+
+DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
+PREFER THE USE OF THE search_doc_chunks TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.`,
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args LearnApiArgs) (*mcp.CallToolResult, any, error) {
+		// In Pons, the 'api' directly maps to the 'context'
+		// We simply return the 'api' string as the context.
+		// If a context is passed, it means we are switching context.
+
+		context := args.Api // The new context is the context
+
+		// You could add logic here to validate if the 'api' (context) exists
+		// For now, we'll assume any string is a valid context.
+
+		result, err := json.Marshal(map[string]interface{}{"context": context})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: string(result)},
+			},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_context",
+		Description: "Retrieves the current context or a list of available contexts.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetContextArgs) (*mcp.CallToolResult, any, error) {
+		// For now, we simply return the context that was passed in.
+		// In a more advanced implementation, this could list all available contexts.
+		result, err := json.Marshal(map[string]interface{}{"context": args.Context})
+		if err != nil {
+			return nil, nil, err
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: string(result)},

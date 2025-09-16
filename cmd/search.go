@@ -48,22 +48,13 @@ var searchCmd = &cobra.Command{
 		// Initialize API
 		ponsAPI := api.NewAPI(st, emb)
 
-		// Generate embedding for the query
-		if verbose {
-			fmt.Println("Generating embeddings for query...")
-		}
-		queryEmbedding, err := emb.GenerateEmbeddings(query)
-		if err != nil {
-			log.Fatalf("Failed to generate embeddings for query: %v", err)
-		}
-
 		// Perform search
 		if verbose {
 			fmt.Println("Performing search...")
 		}
-		results, err := ponsAPI.Search(queryEmbedding, numResults, context)
+		results, err := ponsAPI.Search(query, numResults, context) // Pass query string directly
 		if err != nil {
-			if err.Error() == "no documents in storage to search" {
+			if err.Error() == "no documents found for search" { // Updated error message
 				fmt.Println("No documents found in storage for the provided context.")
 				return
 			}

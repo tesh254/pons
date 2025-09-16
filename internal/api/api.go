@@ -45,13 +45,13 @@ func (a *API) UpsertDocument(baseURL, url, title, description, content, checksum
 }
 
 // GetDocument retrieves a document by URL.
-func (a *API) GetDocument(url, context string) (*storage.Document, error) {
+func (a *API) GetDocument(url string, context string) (*storage.Document, error) {
 	return a.storage.GetDocument(url, context)
 }
 
 // DeleteDocument deletes a document by URL.
-func (a *API) DeleteDocument(url string) error {
-	return a.storage.DeleteDocumentsByPrefix(url)
+func (a *API) DeleteDocument(url, context string) error {
+	return a.storage.DeleteDocumentsByPrefix(url, context)
 }
 
 type SearchResult struct {
@@ -59,15 +59,20 @@ type SearchResult struct {
 	Score float64
 }
 
-// Search finds the most similar documents to a query embedding, up to numResults, optionally filtered by context.
-func (a *API) Search(queryEmbedding []float32, numResults int, context string) ([]SearchResult, error) {
-	docs, err := a.storage.ListAllDocuments(context)
+// Search finds the most similar documents to a query, up to numResults, optionally filtered by context.
+func (a *API) Search(query string, numResults int, context string) ([]SearchResult, error) {
+	queryEmbedding, err := a.llm.GenerateEmbeddings(query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list documents for search: %v", err)
+		return nil, fmt.Errorf("failed to create embedding for query: %v", err)
+	}
+
+	docs, err := a.storage.SearchDocChunks(query, context) // Use the new storage function
+	if err != nil {
+		return nil, fmt.Errorf("failed to search documents: %v", err)
 	}
 
 	if len(docs) == 0 {
-		return nil, fmt.Errorf("no documents in storage to search")
+		return nil, fmt.Errorf("no documents found for search")
 	}
 
 	var results []SearchResult
@@ -133,4 +138,9 @@ func (a *API) ListDocuments(context string, limit int) ([]*storage.Document, err
 		limit = 10 // Default limit
 	}
 	return a.storage.ListDocuments(context, limit)
+}
+
+// GetContexts retrieves a list of unique contexts.
+func (a *API) GetContexts() ([]string, error) {
+	return a.storage.GetContexts()
 }

@@ -105,15 +105,23 @@ func (s *Storage) UpsertDocument(doc *Document) error {
 
 
 
-// DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix.
-func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
-	stmt, err := s.db.Prepare("DELETE FROM documents WHERE url LIKE ? || '%' ")
+// DeleteDocumentsByPrefix deletes all documents with a URL starting with the given prefix, optionally filtered by context.
+func (s *Storage) DeleteDocumentsByPrefix(prefix, context string) error {
+	query := "DELETE FROM documents WHERE url LIKE ? || '%'"
+	args := []interface{}{prefix}
+
+	if context != "" {
+		query += " AND context = ?"
+		args = append(args, context)
+	}
+
+	stmt, err := s.db.Prepare(query)
 	if err != nil {
 		return fmt.Errorf("failed to prepare delete statement: %v", err)
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(prefix)
+	_, err = stmt.Exec(args...)
 	if err != nil {
 		return fmt.Errorf("failed to execute delete statement: %v", err)
 	}
@@ -243,4 +251,74 @@ func (s *Storage) ListAllDocuments(context string) ([]*Document, error) {
 	}
 
 	return docs, nil
+}
+
+// SearchDocChunks searches for documents based on a query and optional context.
+func (s *Storage) SearchDocChunks(query string, context string) ([]*Document, error) {
+	// This is a placeholder. Actual implementation will involve vector search
+	// and filtering by context. For now, it will just return all documents
+	// that match the context (if provided).
+	var rows *sql.Rows
+	var err error
+
+	baseQuery := "SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents"
+	args := []interface{}{}
+
+	if context != "" {
+		baseQuery += " WHERE context = ?"
+		args = append(args, context)
+	}
+
+	// For now, without actual vector search, we'll just return all documents
+	// that match the context. In a real scenario, the 'query' would be used
+	// to perform a similarity search on the 'embeddings' field.
+	rows, err = s.db.Query(baseQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query documents for search: %v", err)
+	}
+	defer rows.Close()
+
+	var docs []*Document
+	for rows.Next() {
+		var doc Document
+		var embeddingsJSON []byte
+		if err := rows.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON, &doc.Context, &doc.SourceType); err != nil {
+			return nil, fmt.Errorf("failed to scan document row during search: %v", err)
+		}
+
+		if err := json.Unmarshal(embeddingsJSON, &doc.Embeddings); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal embeddings during search: %v", err)
+		}
+		docs = append(docs, &doc)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after iterating rows during search: %v", err)
+	}
+
+	return docs, nil
+}
+
+// GetContexts retrieves a list of unique contexts from the database.
+func (s *Storage) GetContexts() ([]string, error) {
+	rows, err := s.db.Query("SELECT DISTINCT context FROM documents WHERE context IS NOT NULL AND context != ''")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct contexts: %v", err)
+	}
+	defer rows.Close()
+
+	var contexts []string
+	for rows.Next() {
+		var context string
+		if err := rows.Scan(&context); err != nil {
+			return nil, fmt.Errorf("failed to scan context row: %v", err)
+		}
+		contexts = append(contexts, context)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after iterating context rows: %v", err)
+	}
+
+	return contexts, nil
 }

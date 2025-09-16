@@ -31,7 +31,8 @@ var deleteCmd = &cobra.Command{
 		emb := llm.NewEmbeddings(workerURL)
 		ponsAPI := api.NewAPI(st, emb)
 
-		if err := ponsAPI.DeleteDocument(url); err != nil {
+		context, _ := cmd.Flags().GetString("context") // Retrieve context flag
+		if err := ponsAPI.DeleteDocument(url, context); err != nil {
 			log.Fatalf("Failed to delete document: %v", err)
 		}
 
@@ -41,4 +42,5 @@ var deleteCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(deleteCmd)
+	deleteCmd.Flags().StringP("context", "c", "", "Context of the document to delete")
 }

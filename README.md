@@ -101,6 +101,16 @@ pons list
 
 This command will display the URL, source type, checksum, content length, and embeddings length for each document.
 
+### `pons contexts`
+
+List all unique contexts currently stored in your knowledge base.
+
+```bash
+pons contexts
+```
+
+This command will display a list of all distinct context names that have been used when adding documents.
+
 ## Using the Pons Model Context Protocol (MCP) Server
 
 The Pons MCP server allows your local AI tools to connect and utilize its capabilities as a knowledge base.
@@ -175,27 +185,27 @@ Pons exposes the following MCP tools for AI tool interaction:
 
 🚨 MANDATORY FIRST STEP: This tool MUST be called before any other Pons tools.
 
-⚠️ ALL OTHER PONS TOOLS WILL FAIL without a `conversationId` from this tool.
-This tool generates a `conversationId` that is REQUIRED for all subsequent tool calls. After calling this tool, you MUST extract the `conversationId` from the response and pass it to every other Pons tool call.
+⚠️ ALL OTHER PONS TOOLS WILL FAIL without a `context` from this tool.
+This tool generates a `context` that is REQUIRED for all subsequent tool calls. After calling this tool, you MUST extract the `context` from the response and pass it to every other Pons tool call.
 
-🔄 MULTIPLE CONTEXT SUPPORT: You MUST call this tool multiple times in the same conversation when you need to learn about different documentation contexts. THIS IS NOT OPTIONAL. Just pass the existing `conversationId` to maintain conversation continuity while loading the new context.
+🔄 MULTIPLE CONTEXT SUPPORT: You MUST call this tool multiple times in the same conversation when you need to learn about different documentation contexts. THIS IS NOT OPTIONAL. Just pass the existing `context` to maintain conversation continuity while loading the new context.
 
 For example, a user might ask a question about the `admin` context, then switch to the `functions` context, then ask a question about `polaris` UI components. In this case, you would call `learn_api` three times with the following arguments:
 
-- `learn_api(api: "admin") -> conversationId: "admin"`
-- `learn_api(api: "functions", conversationId: "admin") -> conversationId: "functions"`
-- `learn_api(api: "polaris", conversationId: "functions") -> conversationId: "polaris"`
+- `learn_api(api: "admin") -> context: "admin"`
+- `learn_api(api: "functions", context: "admin") -> context: "functions"`
+- `learn_api(api: "polaris", context: "functions") -> context: "polaris"`
 
-This is because the `conversationId` is used to maintain conversation continuity while loading the new context.
+This is because the `context` is used to maintain conversation continuity while loading the new context.
 
 🚨 Valid arguments for `api` are:
-    - Any string representing a documentation context (e.g., `shopify-admin`, `my-project-docs`, `general-knowledge`). This string will be used as the `conversationId` for subsequent tool calls.
+    - Any string representing a documentation context (e.g., `shopify-admin`, `my-project-docs`, `general-knowledge`). This string will be used as the `context` for subsequent tool calls.
 
 🔄 WORKFLOW:
 1. Call `learn_api` first with the initial API (context)
-2. Extract the `conversationId` from the response
-3. Pass that same `conversationId` to ALL other Pons tools
-4. If you need to know more about a different context at any point in the conversation, call `learn_api` again with the new API (context) and the same `conversationId`
+2. Extract the `context` from the response
+3. Pass that same `context` to ALL other Pons tools
+4. If you need to know more about a different context at any point in the conversation, call `learn_api` again with the new API (context) and the same `context`
 
 DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
 PREFER THE USE OF THE `search_doc_chunks` TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.
