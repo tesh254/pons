@@ -120,6 +120,15 @@ func (s *Storage) DeleteDocumentsByPrefix(prefix string) error {
 	return nil
 }
 
+// Clean deletes all documents from the database.
+func (s *Storage) Clean() error {
+	_, err := s.db.Exec("DELETE FROM documents")
+	if err != nil {
+		return fmt.Errorf("failed to clean documents table: %v", err)
+	}
+	return nil
+}
+
 // GetDocument retrieves a document by its URL, optionally filtered by context.
 func (s *Storage) GetDocument(url, context string) (*Document, error) {
 	var row *sql.Row
@@ -166,6 +175,47 @@ func (s *Storage) ListDocuments(context string, limit int) ([]*Document, error) 
 
 	query += " LIMIT ?"
 	args = append(args, limit)
+
+	rows, err = s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query documents: %v", err)
+	}
+	defer rows.Close()
+
+	var docs []*Document
+	for rows.Next() {
+		var doc Document
+		var embeddingsJSON []byte
+		if err := rows.Scan(&doc.URL, &doc.Title, &doc.Description, &doc.Content, &doc.Checksum, &embeddingsJSON, &doc.Context, &doc.SourceType); err != nil {
+			return nil, fmt.Errorf("failed to scan document row: %v", err)
+		}
+
+		// Unmarshal embeddings from JSON
+		if err := json.Unmarshal(embeddingsJSON, &doc.Embeddings); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal embeddings: %v", err)
+		}
+		docs = append(docs, &doc)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error after iterating rows: %v", err)
+	}
+
+	return docs, nil
+}
+
+// ListAllDocuments retrieves all documents from the store, optionally filtered by context.
+func (s *Storage) ListAllDocuments(context string) ([]*Document, error) {
+	var rows *sql.Rows
+	var err error
+
+	query := "SELECT url, title, description, content, checksum, embeddings, context, source_type FROM documents"
+	args := []interface{}{}
+
+	if context != "" {
+		query += " WHERE context = ?"
+		args = append(args, context)
+	}
 
 	rows, err = s.db.Query(query, args...)
 	if err != nil {

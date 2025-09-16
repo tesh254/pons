@@ -198,9 +198,9 @@ This is because the `conversationId` is used to maintain conversation continuity
 4. If you need to know more about a different context at any point in the conversation, call `learn_api` again with the new API (context) and the same `conversationId`
 
 DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
-PREFER THE USE OF THE `search_dataset` TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.
+PREFER THE USE OF THE `search_doc_chunks` TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.
 
-#### `search_dataset`
+#### `search_doc_chunks`
 
 Searches the knowledge base for relevant documentation and code examples based on a query string. This tool uses vector embeddings for semantic search.
 

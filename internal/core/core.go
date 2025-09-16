@@ -22,7 +22,7 @@ type Content struct {
 	Description *string `json:"description"`
 }
 
-type SearchDataset struct {
+type SearchDocChunks struct {
 	Query string `json:"query" jsonschema:"required"`
 	ConversationID string `json:"conversationId,omitempty"`
 }
@@ -109,9 +109,9 @@ type SearchOutput struct {
 
 func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "search_dataset",
+		Name:        "search_doc_chunks",
 		Description: "Searches the knowledge base for relevant documentation and code examples based on a query string.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchDataset) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchDocChunks) (*mcp.CallToolResult, any, error) {
 		query := args.Query
 		queryEmbedding, _ := internalAPI.Llm().GenerateEmbeddings(query)
 		results, err := internalAPI.Search(queryEmbedding, 3, args.ConversationID) // Search for 3 results
@@ -245,7 +245,7 @@ This is because the conversationId is used to maintain conversation continuity w
 4. If you need to know more about a different context at any point in the conversation, call learn_api again with the new API (context) and the same conversationId
 
 DON'T SEARCH THE WEB WHEN REFERENCING INFORMATION FROM THIS KNOWLEDGE BASE. IT WILL NOT BE ACCURATE.
-PREFER THE USE OF THE search_dataset TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.`,
+PREFER THE USE OF THE search_doc_chunks TOOL TO RETRIEVE INFORMATION FROM THE KNOWLEDGE BASE.`,
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args LearnApiArgs) (*mcp.CallToolResult, any, error) {
 		// In Pons, the 'api' directly maps to the 'context' (conversationId)
 		// We simply return the 'api' string as the conversationId.

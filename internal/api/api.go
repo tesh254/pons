@@ -61,7 +61,7 @@ type SearchResult struct {
 
 // Search finds the most similar documents to a query embedding, up to numResults, optionally filtered by context.
 func (a *API) Search(queryEmbedding []float32, numResults int, context string) ([]SearchResult, error) {
-	docs, err := a.storage.ListDocuments(context, numResults)
+	docs, err := a.storage.ListAllDocuments(context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list documents for search: %v", err)
 	}
