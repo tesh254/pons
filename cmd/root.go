@@ -209,7 +209,7 @@ func checkVersion() {
 		return
 	}
 
-	fmt.Printf("%sA new version of pons is available: v%s%s", constants.ColorGreen, latestVersion, constants.ColorReset)
+	fmt.Printf("%sA new version of pons is available: v%s%s\n", constants.ColorGreen, latestVersion, constants.ColorReset)
 
 	exe, err := os.Executable()
 	if err != nil {
