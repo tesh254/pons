@@ -119,7 +119,7 @@ func Execute() {
 
 func init() {
 
-cobra.OnInitialize(initConfig)
+	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pons/config.yaml)")
 
@@ -209,7 +209,7 @@ func checkVersion() {
 		return
 	}
 
-	fmt.Printf("\nA new version of pons is available: %s\n", latestVersion)
+	fmt.Printf("%sA new version of pons is available: v%s%s", constants.ColorGreen, latestVersion, constants.ColorReset)
 
 	exe, err := os.Executable()
 	if err != nil {
@@ -224,7 +224,7 @@ func checkVersion() {
 	}
 
 	border := strings.Repeat("─", len(updateInstruction)+4)
-	fmt.Println("┌" + border + "┐")
-	fmt.Println("│  " + updateInstruction + "  │")
-	fmt.Println("└" + border + "┘")
+	fmt.Println(constants.ColorGreen + "┌" + border + "┐" + constants.ColorReset)
+	fmt.Println(constants.ColorGreen + "│  " + updateInstruction + "  │" + constants.ColorReset)
+	fmt.Println(constants.ColorGreen + "└" + border + "┘" + constants.ColorReset)
 }

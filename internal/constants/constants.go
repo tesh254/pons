@@ -7,6 +7,11 @@ import (
 	"github.com/tesh254/pons/internal/version"
 )
 
+const (
+	ColorGreen = "\033[32m"
+	ColorReset = "\033[0m"
+)
+
 const ASCII = `
 ██████╗  ██████╗ ███╗   ██╗███████╗ ██╗██╗ 
 ██╔══██╗██╔═══██╗████╗  ██║██╔════╝██╔╝╚██╗
