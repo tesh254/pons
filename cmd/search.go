@@ -63,6 +63,10 @@ var searchCmd = &cobra.Command{
 		}
 		results, err := ponsAPI.Search(queryEmbedding, numResults, context)
 		if err != nil {
+			if err.Error() == "no documents in storage to search" {
+				fmt.Println("No documents found in storage for the provided context.")
+				return
+			}
 			log.Fatalf("Search failed: %v", err)
 		}
 

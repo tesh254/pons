@@ -114,8 +114,11 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchDocChunks) (*mcp.CallToolResult, any, error) {
 		query := args.Query
 		queryEmbedding, _ := internalAPI.Llm().GenerateEmbeddings(query)
-		results, err := internalAPI.Search(queryEmbedding, 3, args.ConversationID) // Search for 3 results
+		results, err := internalAPI.Search(queryEmbedding, 1, args.ConversationID)
 		if err != nil {
+			if err.Error() == "no documents in storage to search" {
+				return nil, nil, fmt.Errorf("no relevant documents found")
+			}
 			return nil, nil, err
 		}
 
@@ -123,19 +126,17 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 			return nil, nil, fmt.Errorf("no relevant documents found")
 		}
 
-		var searchOutputs []SearchOutput
-		for _, res := range results {
-			searchOutputs = append(searchOutputs, SearchOutput{
-				URL:         res.Doc.URL,
-				Title:       res.Doc.Title,
-				Description: res.Doc.Description,
-				Content:     res.Doc.Content,
-				Checksum:    res.Doc.Checksum,
-				Score:       res.Score, // Include the score
-			})
+		topResult := results[0]
+		searchOutput := SearchOutput{
+			URL:         topResult.Doc.URL,
+			Title:       topResult.Doc.Title,
+			Description: topResult.Doc.Description,
+			Content:     topResult.Doc.Content,
+			Checksum:    topResult.Doc.Checksum,
+			Score:       topResult.Score,
 		}
 
-		result, err := json.Marshal(map[string]interface{}{"documents": searchOutputs}) // Change "document" to "documents" and marshal the slice
+		result, err := json.Marshal(searchOutput)
 		if err != nil {
 			return nil, nil, err
 		}
