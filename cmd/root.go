@@ -1,10 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/blang/semver/v4"
+	"github.com/google/go-github/v30/github"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -113,7 +118,8 @@ func Execute() {
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+
+cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.pons/config.yaml)")
 
@@ -174,4 +180,51 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil {
 		// fmt.Println("Using config file:", viper.ConfigFileUsed())
 	}
+
+	checkVersion()
+}
+
+func checkVersion() {
+	client := github.NewClient(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	release, _, err := client.Repositories.GetLatestRelease(ctx, "tesh254", "pons")
+	if err != nil {
+		return
+	}
+
+	latestVersion, err := semver.Parse(release.GetTagName()[1:])
+	if err != nil {
+		return
+	}
+
+	currentVersionStr := version.GetVersion()
+	currentVersion, err := semver.Parse(currentVersionStr[1:])
+	if err != nil {
+		return
+	}
+
+	if latestVersion.LE(currentVersion) {
+		return
+	}
+
+	fmt.Printf("\nA new version of pons is available: %s\n", latestVersion)
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	var updateInstruction string
+	if strings.Contains(exe, "brew") {
+		updateInstruction = "To update, run: brew upgrade pons"
+	} else {
+		updateInstruction = "To update, run: curl -sSL https://raw.githubusercontent.com/tesh254/pons/main/install.sh | sh"
+	}
+
+	border := strings.Repeat("─", len(updateInstruction)+4)
+	fmt.Println("┌" + border + "┐")
+	fmt.Println("│  " + updateInstruction + "  │")
+	fmt.Println("└" + border + "┘")
 }
