@@ -154,6 +154,17 @@ func (c *Core) registerTools(server *mcp.Server, internalAPI *api.API) {
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
+		Name:        "mandatory_initial_call",
+		Description: "✨ **MANDATORY FIRST STEP** ✨: This tool *must* be called before any other Pons tools. 🚀 To ensure the most helpful search results, always begin by calling `get_contexts` to retrieve a list of available documentation contexts. 📚 When performing a search, *strongly consider* providing a specific `context` to `search_doc_chunks` for highly relevant results. 🎯 While the `context` is optional, if the user's prompt doesn't clearly indicate a context, feel free to proceed directly with `search_doc_chunks`. You can always prompt the user for clarification after calling `get_contexts`! 🗣️",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: "Initial call acknowledged. Please proceed with get_contexts or search_doc_chunks."},
+			},
+		}, nil, nil
+	})
+
+	mcp.AddTool(server, &mcp.Tool{
 		Name:        "upsert_document",
 		Description: "Adds or updates a document in the knowledge base, automatically generating embeddings.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args UpsertDocumentArgs) (*mcp.CallToolResult, any, error) {

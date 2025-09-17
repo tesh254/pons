@@ -152,11 +152,15 @@ st, err := storage.NewStorage(dbPath)
 				fmt.Printf("  - Successfully added file %s\n", filePath)
 			}
 		}
+		if !verbose {
+			fmt.Println("\033[32m\u2713 Documentation added successfully.\033[0m")
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(addCmd)
 	addCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
-	addCmd.Flags().StringP("context", "c", "default", "Context for the scraped documents")
+	addCmd.Flags().StringP("context", "c", "", "Context for the scraped documents") // Removed default value
+	addCmd.MarkFlagRequired("context") // Mark as required
 }
